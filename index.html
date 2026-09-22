@@ -5,14 +5,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.3/dist/teachablemachine-image.min.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 15px; background: #fff; }
-    #res { font-size: 18px; font-weight: bold; margin-top: 10px; color: #333; }
-    input { font-size: 15px; padding: 8px; margin: 15px 0; }
+    body { font-family: sans-serif; text-align: center; padding: 10px; background: #fff; margin: 0; }
+    #res { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 10px; }
+    input { font-size: 14px; padding: 8px; }
   </style>
 </head>
 <body>
   <div id="res">Loading AI Model...</div>
-  <input type="file" accept="image/*" onchange="predict(this)">
+  <input type="file" accept="image/*" onchange="processAndPredict(this)">
 
   <script>
     const MODEL_URL = "https://teachablemachine.withgoogle.com/models/86305RftG/";
@@ -21,45 +21,55 @@
     async function loadModel() {
       try {
         model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
-        document.getElementById("res").innerText = "Model Ready! Select photo below.";
+        document.getElementById("res").innerText = "Model Ready! Select photo.";
       } catch (err) {
-        document.getElementById("res").innerText = "Error: " + err.message;
+        document.getElementById("res").innerText = "Error loading model.";
       }
     }
 
-    async function predict(input) {
+    async function processAndPredict(input) {
       if (!input.files || !input.files[0]) return;
       if (!model) {
-        document.getElementById("res").innerText = "Please wait, model is still loading...";
+        document.getElementById("res").innerText = "Please wait, model still loading...";
         return;
       }
 
       document.getElementById("res").innerText = "Analyzing photo...";
 
-      const img = document.createElement('img');
-      img.src = URL.createObjectURL(input.files[0]);
-      
-      img.onload = async () => {
-        try {
-          const prediction = await model.predict(img);
-          let top = prediction[0];
-          for (let i = 1; i < prediction.length; i++) {
-            if (prediction[i].probability > top.probability) {
-              top = prediction[i];
-            }
-          }
-          const percentage = Math.round(top.probability * 100);
-          const finalResult = top.className + " (" + percentage + "%)";
-          
-          document.getElementById("res").innerText = finalResult;
+      const file = input.files[0];
+      const reader = new FileReader();
 
-          if (window.AppInventor) {
-            window.AppInventor.setWebViewString(finalResult);
+      reader.onload = function(e) {
+        const base64Image = e.target.result; // Complete base64 image data string
+
+        const img = document.createElement('img');
+        img.src = base64Image;
+        
+        img.onload = async () => {
+          try {
+            const prediction = await model.predict(img);
+            let top = prediction[0];
+            for (let i = 1; i < prediction.length; i++) {
+              if (prediction[i].probability > top.probability) {
+                top = prediction[i];
+              }
+            }
+            const percentage = Math.round(top.probability * 100);
+            const resultText = top.className + " (" + percentage + "%)";
+            
+            document.getElementById("res").innerText = resultText;
+
+            // Send BOTH the result string and base64 image string separated by '|'
+            if (window.AppInventor) {
+              window.AppInventor.setWebViewString(resultText + "|" + base64Image);
+            }
+          } catch (err) {
+            document.getElementById("res").innerText = "Analysis error.";
           }
-        } catch (e) {
-          document.getElementById("res").innerText = "Analysis error: " + e.message;
-        }
+        };
       };
+
+      reader.readAsDataURL(file);
     }
 
     window.onload = loadModel;
