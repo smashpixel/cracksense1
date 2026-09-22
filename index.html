@@ -6,45 +6,63 @@
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.3/dist/teachablemachine-image.min.js"></script>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 10px; background: #fff; margin: 0; }
-    #res { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 10px; }
-    input { font-size: 14px; padding: 8px; }
+    #res { font-size: 14px; color: #555; margin-bottom: 8px; }
+    input { font-size: 14px; padding: 6px; }
   </style>
 </head>
 <body>
   <div id="res">Loading AI Model...</div>
-  <input type="file" accept="image/*" onchange="processAndPredict(this)">
+  <input type="file" id="imageInput" accept="image/*" onchange="previewSelectedImage(this)">
 
   <script>
     const MODEL_URL = "https://teachablemachine.withgoogle.com/models/86305RftG/";
     let model;
+    let selectedFile = null;
 
     async function loadModel() {
       try {
         model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
-        document.getElementById("res").innerText = "Model Ready! Select photo.";
+        document.getElementById("res").innerText = "Model Ready!";
       } catch (err) {
         document.getElementById("res").innerText = "Error loading model.";
       }
     }
 
-    async function processAndPredict(input) {
+    // Called when user selects a file
+    function previewSelectedImage(input) {
       if (!input.files || !input.files[0]) return;
+      selectedFile = input.files[0];
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64Image = e.target.result;
+        // Send image preview immediately back to Kodular
+        if (window.AppInventor) {
+          window.AppInventor.setWebViewString("PREVIEW_ONLY|" + base64Image);
+        }
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+
+    // Called when native Kodular 'Analyze' button is clicked
+    async function runPrediction() {
+      if (!selectedFile) {
+        if (window.AppInventor) window.AppInventor.setWebViewString("Please select a photo first!|");
+        return;
+      }
       if (!model) {
-        document.getElementById("res").innerText = "Please wait, model still loading...";
+        if (window.AppInventor) window.AppInventor.setWebViewString("Model still loading...|");
         return;
       }
 
-      document.getElementById("res").innerText = "Analyzing photo...";
+      document.getElementById("res").innerText = "Analyzing...";
 
-      const file = input.files[0];
       const reader = new FileReader();
-
       reader.onload = function(e) {
-        const base64Image = e.target.result; // Complete base64 image data string
-
+        const base64Image = e.target.result;
         const img = document.createElement('img');
         img.src = base64Image;
-        
+
         img.onload = async () => {
           try {
             const prediction = await model.predict(img);
@@ -56,20 +74,19 @@
             }
             const percentage = Math.round(top.probability * 100);
             const resultText = top.className + " (" + percentage + "%)";
-            
+
             document.getElementById("res").innerText = resultText;
 
-            // Send BOTH the result string and base64 image string separated by '|'
+            // Return analysis result and image to Kodular
             if (window.AppInventor) {
               window.AppInventor.setWebViewString(resultText + "|" + base64Image);
             }
           } catch (err) {
-            document.getElementById("res").innerText = "Analysis error.";
+            if (window.AppInventor) window.AppInventor.setWebViewString("Analysis error.|");
           }
         };
       };
-
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(selectedFile);
     }
 
     window.onload = loadModel;
